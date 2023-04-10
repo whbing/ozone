@@ -761,7 +761,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       OzoneAclUtils.setOMMultiTenantManager(multiTenantManager);
     }
     volumeManager = new VolumeManagerImpl(metadataManager);
-    bucketManager = new BucketManagerImpl(metadataManager);
+    bucketManager = new BucketManagerImpl(this, metadataManager);
     s3SecretManager = new S3SecretLockedManager(
         new S3SecretManagerImpl(metadataManagerImpl, metadataManagerImpl),
         metadataManager.getLock()
