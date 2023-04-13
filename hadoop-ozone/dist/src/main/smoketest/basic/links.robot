@@ -40,13 +40,11 @@ Setup ACL tests
     Execute             ozone sh key put ${source}/readable-bucket/key-in-readable-bucket /etc/passwd
     Execute             ozone sh bucket create ${source}/unreadable-bucket
     Execute             ozone sh bucket link ${source}/readable-bucket ${target}/readable-link
-    Execute             ozone sh bucket link ${source}/readable-bucket ${target}/unreadable-link
     Execute             ozone sh bucket link ${source}/unreadable-bucket ${target}/link-to-unreadable-bucket
 
     Execute             ozone sh volume addacl --acl user:testuser2:r ${target}
     Execute             ozone sh volume addacl --acl user:testuser2:rl ${source}
     Execute             ozone sh bucket addacl --acl user:testuser2:rl ${source}/readable-bucket
-    Execute             ozone sh bucket addacl --acl user:testuser2:r ${target}/readable-link
     Execute             ozone sh bucket addacl --acl user:testuser2:r ${target}/link-to-unreadable-bucket
 
 Can follow link with read access
@@ -55,20 +53,87 @@ Can follow link with read access
     ${result} =         Execute And Ignore Error    ozone sh key list ${target}/readable-link
                         Should Contain              ${result}         key-in-readable-bucket
 
-Cannot follow link without read access
-    Execute             kdestroy
-    Run Keyword         Kinit test user             testuser2         testuser2.keytab
-    ${result} =         Execute And Ignore Error    ozone sh key list ${target}/unreadable-link
-                        Should Contain              ${result}         PERMISSION_DENIED
+Source and target have same ACLs
+    Execute             ozone sh bucket create ${source}/acl-bucket
+    Execute             ozone sh key put ${source}/acl-bucket/key-in-acl-bucket /etc/passwd
+    Execute             ozone sh bucket link ${source}/acl-bucket ${target}/acl-link
 
-ACL verified on source bucket
+    Execute             ozone sh bucket addacl --acl user:user1:rwxy ${target}/acl-link
+    Verify ACL          bucket    ${target}/acl-link      USER    user1    READ WRITE READ_ACL WRITE_ACL
+    Verify ACL          bucket    ${source}/acl-bucket    USER    user1    READ WRITE READ_ACL WRITE_ACL
+    ${result} =         Execute And Ignore Error    ozone sh bucket addacl --acl user:user1:r ${source}/acl-bucket
+                        Should Contain              ${result}    already exist
+    Execute             ozone sh bucket removeacl --acl user:user1:y ${target}/acl-link
+    Verify ACL          bucket    ${target}/acl-link      USER    user1    READ WRITE READ_ACL
+    Verify ACL          bucket    ${source}/acl-bucket    USER    user1    READ WRITE READ_ACL
+    Execute             ozone sh bucket setacl --acl user:user1:rw ${source}/acl-bucket
+    Verify ACL          bucket    ${target}/acl-link      USER    user1    READ WRITE
+    Verify ACL          bucket    ${source}/acl-bucket    USER    user1    READ WRITE
+
+    Execute             ozone sh bucket addacl --acl group:group2:r ${source}/acl-bucket
+    Verify ACL          bucket    ${target}/acl-link      GROUP   group2    READ
+    Verify ACL          bucket    ${source}/acl-bucket    GROUP   group2    READ
+    ${result} =         Execute And Ignore Error    ozone sh bucket addacl --acl group:group2:r ${target}/acl-link
+                        Should Contain              ${result}    already exist
+    Execute             ozone sh bucket removeacl --acl group:group2:r ${source}/acl-bucket
+    Verify ACL          bucket    ${target}/acl-link      GROUP   group2    ${EMPTY}
+    Verify ACL          bucket    ${source}/acl-bucket    GROUP   group2    ${EMPTY}
+    Execute             ozone sh bucket setacl --acl group:group2:rw ${target}/acl-link
+    Verify ACL          bucket    ${target}/acl-link      GROUP   group2    READ WRITE
+    Verify ACL          bucket    ${source}/acl-bucket    GROUP   group2    READ WRITE
+
+    Execute             ozone sh key addacl --acl user:user1:rwxy ${source}/acl-bucket/key-in-acl-bucket
+    Verify ACL          key       ${target}/acl-link/key-in-acl-bucket    USER    user1    READ WRITE READ_ACL WRITE_ACL
+    Verify ACL          key       ${source}/acl-bucket/key-in-acl-bucket  USER    user1    READ WRITE READ_ACL WRITE_ACL
+    ${result} =         Execute And Ignore Error    ozone sh key addacl --acl user:user1:rwxy ${target}/acl-link/key-in-acl-bucket
+                        Should Contain              ${result}    already exist
+    Execute             ozone sh key removeacl --acl user:user1:y ${target}/acl-link/key-in-acl-bucket
+    Verify ACL          key       ${target}/acl-link/key-in-acl-bucket    USER    user1    READ WRITE READ_ACL
+    Verify ACL          key       ${source}/acl-bucket/key-in-acl-bucket  USER    user1    READ WRITE READ_ACL
+    Execute             ozone sh key setacl --acl user:user1:rw ${source}/acl-bucket/key-in-acl-bucket
+    Verify ACL          key       ${target}/acl-link/key-in-acl-bucket    USER    user1    READ WRITE
+    Verify ACL          key       ${source}/acl-bucket/key-in-acl-bucket  USER    user1    READ WRITE
+
+Source and target have same access permission
     Execute             kdestroy
     Run Keyword         Kinit test user             testuser2         testuser2.keytab
-    ${result} =         Execute                     ozone sh bucket info ${target}/link-to-unreadable-bucket
-                        Should Contain              ${result}         link-to-unreadable-bucket
-                        Should Not Contain          ${result}         PERMISSION_DENIED
-    ${result} =         Execute And Ignore Error    ozone sh key list ${target}/link-to-unreadable-bucket
+    ${result} =         Execute                     ozone sh bucket info ${target}/acl-link
                         Should Contain              ${result}         PERMISSION_DENIED
+    ${result} =         Execute                     ozone sh bucket info ${source}/acl-bucket
+                        Should Contain              ${result}         PERMISSION_DENIED
+    Execute             kdestroy
+    Run Keyword         Kinit test user             testuser          testuser.keytab
+    Execute             ozone sh bucket addacl --acl user:testuser2:r ${target}/acl-link
+    Execute             kdestroy
+    Run Keyword         Kinit test user             testuser2         testuser2.keytab
+    ${result} =         Execute                     ozone sh bucket info ${target}/acl-link
+                        Should Contain              ${result}         acl-bucket
+                        Should Not Contain          ${result}         PERMISSION_DENIED
+    ${result} =         Execute                     ozone sh bucket info ${source}/acl-bucket
+                        Should Contain              ${result}         acl-bucket
+                        Should Not Contain          ${result}         PERMISSION_DENIED
+
+    ${result} =         Execute And Ignore Error    ozone sh key list ${target}/acl-link
+                        Should Contain              ${result}         key-in-acl-bucket
+                        Should Not Contain          ${result}         PERMISSION_DENIED
+    ${result} =         Execute And Ignore Error    ozone sh key list ${source}/acl-bucket
+                        Should Contain              ${result}         key-in-acl-bucket
+                        Should Not Contain          ${result}         PERMISSION_DENIED
+    ${result} =         Execute And Ignore Error    ozone sh key info ${source}/acl-bucket/key-in-acl-bucket
+                        Should Contain              ${result}         PERMISSION_DENIED
+    ${result} =         Execute And Ignore Error    ozone sh key info ${target}/acl-link/key-in-acl-bucket
+                        Should Contain              ${result}         PERMISSION_DENIED
+    Execute             kdestroy
+    Run Keyword         Kinit test user             testuser          testuser.keytab
+    Execute             ozone sh key addacl --acl user:testuser2:r ${target}/acl-link/key-in-acl-bucket
+    Execute             kdestroy
+    Run Keyword         Kinit test user             testuser2         testuser2.keytab
+    ${result} =         Execute And Ignore Error    ozone sh key info ${source}/acl-bucket/key-in-acl-bucket
+                        Should Contain              ${result}         key-in-acl-bucket
+                        Should Not Contain          ${result}         PERMISSION_DENIED
+    ${result} =         Execute And Ignore Error    ozone sh key info ${target}/acl-link/key-in-acl-bucket
+                        Should Contain              ${result}         key-in-acl-bucket
+                        Should Not Contain          ${result}         PERMISSION_DENIED
 
 Create link loop
     Run Keyword if      '${SECURITY_ENABLED}' == 'true'    Kinit test user     testuser     testuser.keytab
@@ -124,14 +189,9 @@ Bucket info shows source
                         Should Contain              ${result}            creationTime
                         Should Not contain          ${result}            metadata
 
-Source and target have separate ACLs
-    Execute       ozone sh bucket addacl --acl user:user1:rwxy ${target}/link1
-    Verify ACL    bucket    ${target}/link1      USER    user1    READ WRITE READ_ACL WRITE_ACL
-    Verify ACL    bucket    ${source}/bucket1    USER    user1    ${EMPTY}
-
-    Execute       ozone sh bucket addacl --acl group:group2:r ${source}/bucket1
-    Verify ACL    bucket    ${target}/link1      GROUP   group2    ${EMPTY}
-    Verify ACL    bucket    ${source}/bucket1    GROUP   group2    READ
+Source and target share ACLs
+    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same ACLs
+    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same access permission
 
 Buckets and links share namespace
                         Execute                     ozone sh bucket link ${source}/bucket2 ${target}/link2
@@ -144,12 +204,6 @@ Buckets and links share namespace
 
 Can follow link with read access
     Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Can follow link with read access
-
-Cannot follow link without read access
-    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Cannot follow link without read access
-
-ACL verified on source bucket
-    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    ACL verified on source bucket
 
 Loop in link chain is detected
     [setup]             Create link loop
