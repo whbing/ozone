@@ -189,8 +189,10 @@ Bucket info shows source
                         Should Contain              ${result}            creationTime
                         Should Not contain          ${result}            metadata
 
-Source and target share ACLs
+Source and target have same ACLs
     Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same ACLs
+
+Source and target have same access permission
     Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same access permission
 
 Buckets and links share namespace
