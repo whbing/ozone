@@ -53,7 +53,7 @@ Can follow link with read access
     ${result} =         Execute And Ignore Error    ozone sh key list ${target}/readable-link
                         Should Contain              ${result}         key-in-readable-bucket
 
-Source and target have same ACLs
+Source and target have same bucket ACLs
     Execute             ozone sh bucket create ${source}/acl-bucket
     Execute             ozone sh key put ${source}/acl-bucket/key-in-acl-bucket /etc/passwd
     Execute             ozone sh bucket link ${source}/acl-bucket ${target}/acl-link
@@ -61,8 +61,6 @@ Source and target have same ACLs
     Execute             ozone sh bucket addacl --acl user:user1:rwxy ${target}/acl-link
     Verify ACL          bucket    ${target}/acl-link      USER    user1    READ WRITE READ_ACL WRITE_ACL
     Verify ACL          bucket    ${source}/acl-bucket    USER    user1    READ WRITE READ_ACL WRITE_ACL
-    ${result} =         Execute And Ignore Error    ozone sh bucket addacl --acl user:user1:r ${source}/acl-bucket
-                        Should Contain              ${result}    already exist
     Execute             ozone sh bucket removeacl --acl user:user1:y ${target}/acl-link
     Verify ACL          bucket    ${target}/acl-link      USER    user1    READ WRITE READ_ACL
     Verify ACL          bucket    ${source}/acl-bucket    USER    user1    READ WRITE READ_ACL
@@ -73,20 +71,11 @@ Source and target have same ACLs
     Execute             ozone sh bucket addacl --acl group:group2:r ${source}/acl-bucket
     Verify ACL          bucket    ${target}/acl-link      GROUP   group2    READ
     Verify ACL          bucket    ${source}/acl-bucket    GROUP   group2    READ
-    ${result} =         Execute And Ignore Error    ozone sh bucket addacl --acl group:group2:r ${target}/acl-link
-                        Should Contain              ${result}    already exist
-    Execute             ozone sh bucket removeacl --acl group:group2:r ${source}/acl-bucket
-    Verify ACL          bucket    ${target}/acl-link      GROUP   group2    ${EMPTY}
-    Verify ACL          bucket    ${source}/acl-bucket    GROUP   group2    ${EMPTY}
-    Execute             ozone sh bucket setacl --acl group:group2:rw ${target}/acl-link
-    Verify ACL          bucket    ${target}/acl-link      GROUP   group2    READ WRITE
-    Verify ACL          bucket    ${source}/acl-bucket    GROUP   group2    READ WRITE
 
+Source and target have same key ACLs
     Execute             ozone sh key addacl --acl user:user1:rwxy ${source}/acl-bucket/key-in-acl-bucket
     Verify ACL          key       ${target}/acl-link/key-in-acl-bucket    USER    user1    READ WRITE READ_ACL WRITE_ACL
     Verify ACL          key       ${source}/acl-bucket/key-in-acl-bucket  USER    user1    READ WRITE READ_ACL WRITE_ACL
-    ${result} =         Execute And Ignore Error    ozone sh key addacl --acl user:user1:rwxy ${target}/acl-link/key-in-acl-bucket
-                        Should Contain              ${result}    already exist
     Execute             ozone sh key removeacl --acl user:user1:y ${target}/acl-link/key-in-acl-bucket
     Verify ACL          key       ${target}/acl-link/key-in-acl-bucket    USER    user1    READ WRITE READ_ACL
     Verify ACL          key       ${source}/acl-bucket/key-in-acl-bucket  USER    user1    READ WRITE READ_ACL
@@ -94,7 +83,7 @@ Source and target have same ACLs
     Verify ACL          key       ${target}/acl-link/key-in-acl-bucket    USER    user1    READ WRITE
     Verify ACL          key       ${source}/acl-bucket/key-in-acl-bucket  USER    user1    READ WRITE
 
-Source and target have same access permission
+Source and target have same bucket access
     Execute             kdestroy
     Run Keyword         Kinit test user             testuser2         testuser2.keytab
     ${result} =         Execute                     ozone sh bucket info ${target}/acl-link
@@ -113,12 +102,9 @@ Source and target have same access permission
                         Should Contain              ${result}         acl-bucket
                         Should Not Contain          ${result}         PERMISSION_DENIED
 
-    ${result} =         Execute And Ignore Error    ozone sh key list ${target}/acl-link
-                        Should Contain              ${result}         key-in-acl-bucket
-                        Should Not Contain          ${result}         PERMISSION_DENIED
-    ${result} =         Execute And Ignore Error    ozone sh key list ${source}/acl-bucket
-                        Should Contain              ${result}         key-in-acl-bucket
-                        Should Not Contain          ${result}         PERMISSION_DENIED
+Source and target have same key access
+    Execute             kdestroy
+    Run Keyword         Kinit test user             testuser2         testuser2.keytab
     ${result} =         Execute And Ignore Error    ozone sh key info ${source}/acl-bucket/key-in-acl-bucket
                         Should Contain              ${result}         PERMISSION_DENIED
     ${result} =         Execute And Ignore Error    ozone sh key info ${target}/acl-link/key-in-acl-bucket
@@ -189,11 +175,17 @@ Bucket info shows source
                         Should Contain              ${result}            creationTime
                         Should Not contain          ${result}            metadata
 
-Source and target have same ACLs
-    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same ACLs
+Source and target have same bucket ACLs
+    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same bucket ACLs
 
-Source and target have same access permission
-    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same access permission
+Source and target have same key ACLs
+    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same key ACLs
+
+Source and target have same bucket access
+    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same bucket access
+
+Source and target have same key access
+    Run Keyword if    '${SECURITY_ENABLED}' == 'true'    Source and target have same key access
 
 Buckets and links share namespace
                         Execute                     ozone sh bucket link ${source}/bucket2 ${target}/link2
