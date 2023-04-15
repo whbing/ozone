@@ -67,9 +67,9 @@ Cannot follow link without read access
 ACL verified on source and target bucket
     Execute             kdestroy
     Run Keyword         Kinit test user             testuser2         testuser2.keytab
-    ${result} =         Execute                     ozone sh bucket info ${target}/link-to-unreadable-bucket
+    ${result} =         Execute And Ignore Error    ozone sh bucket info ${target}/link-to-unreadable-bucket
                         Should Contain              ${result}         PERMISSION_DENIED
-    ${result} =         Execute                     ozone sh bucket info ${source}/unreadable-bucket
+    ${result} =         Execute And Ignore Error    ozone sh bucket info ${source}/unreadable-bucket
                         Should Contain              ${result}         PERMISSION_DENIED
     ${result} =         Execute And Ignore Error    ozone sh bucket getacl ${target}/link-to-unreadable-bucket
                         Should Not Contain          ${result}         PERMISSION_DENIED
@@ -157,8 +157,8 @@ Source and target key have same ACLs
     Verify ACL          key       ${source}/bucket1/key1   USER    user1    READ WRITE
 
     Execute             ozone sh key addacl --acl group:group2:r ${source}/bucket1/key1
-    Verify ACL          bucket    ${target}/link1/key1     GROUP   group2    READ
-    Verify ACL          bucket    ${source}/bucket1/key1   GROUP   group2    READ
+    Verify ACL          key    ${target}/link1/key1     GROUP   group2    READ
+    Verify ACL          key    ${source}/bucket1/key1   GROUP   group2    READ
 
 Buckets and links share namespace
                         Execute                     ozone sh bucket link ${source}/bucket2 ${target}/link2
