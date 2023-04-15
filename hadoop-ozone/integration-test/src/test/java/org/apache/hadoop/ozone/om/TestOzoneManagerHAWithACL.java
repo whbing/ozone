@@ -258,7 +258,6 @@ public class TestOzoneManagerHAWithACL extends TestOzoneManagerHA {
     OzoneObj srcObj2 = buildBucketObj(srcBucket2);
     String user2 = "remoteUser2";
     OzoneAcl acl2 = new OzoneAcl(USER, user2, READ, DEFAULT);
-    testAddAcl(user2, srcObj2, acl2);
     testRemoveAcl(user2, srcObj2, acl2);
     assertEqualsAcls(srcObj2, linkObj2);
 
