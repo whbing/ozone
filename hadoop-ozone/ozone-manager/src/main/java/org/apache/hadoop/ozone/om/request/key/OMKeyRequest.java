@@ -270,9 +270,10 @@ public abstract class OMKeyRequest extends OMClientRequest {
   }
 
   protected List< OzoneAcl > getAclsForKey(KeyArgs keyArgs,
-      OmBucketInfo bucketInfo, PrefixManager prefixManager) {
-    List<OzoneAcl> acls = new ArrayList<>();
+      OmBucketInfo bucketInfo, OMFileRequest.OMPathInfo omPathInfo,
+      PrefixManager prefixManager) {
 
+    List<OzoneAcl> acls = new ArrayList<>();
     if (keyArgs.getAclsList() != null) {
       acls.addAll(OzoneAclUtil.fromProtobuf(keyArgs.getAclsList()));
     }
@@ -296,8 +297,16 @@ public abstract class OMKeyRequest extends OMClientRequest {
       }
     }
 
+    // Inherit DEFAULT acls from parent-dir only if DEFAULT acls for
+    // prefix are not set
+    if (omPathInfo != null) {
+      if (OzoneAclUtil.inheritDefaultAcls(acls, omPathInfo.getAcls())) {
+        return acls;
+      }
+    }
+
     // Inherit DEFAULT acls from bucket only if DEFAULT acls for
-    // prefix are not set.
+    // parent-dir are not set.
     if (bucketInfo != null) {
       if (OzoneAclUtil.inheritDefaultAcls(acls, bucketInfo.getAcls())) {
         return acls;
@@ -307,12 +316,21 @@ public abstract class OMKeyRequest extends OMClientRequest {
     return acls;
   }
 
-  protected static List<OzoneAcl> inheritDefaultAcls(KeyArgs keyArgs,
+  /**
+   * Inherit parent's default acls and generate its own acls.
+   * @param keyArgs
+   * @param parentAcls
+   * @return Acls of inherited and its own
+   */
+  protected static List<OzoneAcl> buildAcls(KeyArgs keyArgs,
       List<OzoneAcl> parentAcls) {
-    List<OzoneAcl> inheritAcls = new ArrayList<>();
-    inheritAcls.addAll(OzoneAclUtil.fromProtobuf(keyArgs.getAclsList()));
-    OzoneAclUtil.inheritDefaultAcls(inheritAcls, parentAcls);
-    return inheritAcls;
+    // inherit parent acls and convert to DEFAULT scope
+    List<OzoneAcl> acls = new ArrayList<>();
+    OzoneAclUtil.inheritDefaultAcls(acls, parentAcls);
+    OzoneAclUtil.toDefaultScope(acls);
+    // add own acls
+    acls.addAll(OzoneAclUtil.fromProtobuf(keyArgs.getAclsList()));
+    return acls;
   }
 
   /**
@@ -714,7 +732,8 @@ public abstract class OMKeyRequest extends OMClientRequest {
             .setDataSize(size)
             .setReplicationConfig(replicationConfig)
             .setFileEncryptionInfo(encInfo)
-            .setAcls(getAclsForKey(keyArgs, omBucketInfo, prefixManager))
+            .setAcls(getAclsForKey(
+                keyArgs, omBucketInfo, omPathInfo, prefixManager))
             .addAllMetadata(KeyValueUtil.getFromProtobuf(
                     keyArgs.getMetadataList()))
             .setUpdateID(transactionLogIndex);
