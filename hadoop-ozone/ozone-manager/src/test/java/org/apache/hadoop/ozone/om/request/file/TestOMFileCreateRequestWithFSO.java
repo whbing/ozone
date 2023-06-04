@@ -156,6 +156,12 @@ public class TestOMFileCreateRequestWithFSO extends TestOMFileCreateRequest {
     testNonRecursivePath(key, false, false, true);
   }
 
+  @Test
+  public void testCreateFileInheritParentDefaultAcls()
+      throws Exception {
+    super.testCreateFileInheritParentDefaultAcls();
+  }
+
   @Override
   protected OmKeyInfo verifyPathInOpenKeyTable(String key, long id,
                                              boolean doAssert)
