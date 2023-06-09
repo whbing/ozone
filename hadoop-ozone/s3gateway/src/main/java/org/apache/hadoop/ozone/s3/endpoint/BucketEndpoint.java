@@ -69,6 +69,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.apache.hadoop.ozone.OzoneAcl.AclScope.ACCESS;
+import static org.apache.hadoop.ozone.OzoneConsts.OZONE_URI_DELIMITER;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.NOT_IMPLEMENTED;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.newError;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.ENCODING_TYPE;
@@ -142,6 +143,9 @@ public class BucketEndpoint extends EndpointBase {
         ozoneKeyIterator = bucket.listKeys(prefix, startAfter);
       } else if (startAfter == null && continueToken != null) {
         ozoneKeyIterator = bucket.listKeys(prefix, decodedToken.getLastKey());
+      } else if (OZONE_URI_DELIMITER.equals(delimiter)) {
+        // List immediate children delimited by OZONE_URI_DELIMITER
+        ozoneKeyIterator = bucket.listKeys(prefix, null, true);
       } else {
         ozoneKeyIterator = bucket.listKeys(prefix);
       }

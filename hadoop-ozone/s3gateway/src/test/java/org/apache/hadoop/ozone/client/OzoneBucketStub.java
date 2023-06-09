@@ -244,6 +244,12 @@ public class OzoneBucketStub extends OzoneBucket {
         .iterator();
   }
 
+  public Iterator<? extends OzoneKey> listKeys(String keyPrefix,
+      String prevKey, boolean fastList) throws IOException {
+    return prevKey != null ? listKeys(keyPrefix, prevKey)
+        : listKeys(keyPrefix);
+  }
+
   @Override
   public void deleteKey(String key) throws IOException {
     keyDetails.remove(key);

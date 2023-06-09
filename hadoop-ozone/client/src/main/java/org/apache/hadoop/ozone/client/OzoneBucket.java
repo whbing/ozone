@@ -556,9 +556,22 @@ public class OzoneBucket extends WithMetadata {
    */
   public Iterator<? extends OzoneKey> listKeys(String keyPrefix, String prevKey)
       throws IOException {
+    return listKeys(keyPrefix, prevKey, false);
+  }
 
+  /**
+   * Returns Iterator to iterate over all keys after prevKey in the bucket.
+   * If fastList is true, iterator will only contain immediate children.
+   *
+   * @param keyPrefix Bucket prefix to match
+   * @param prevKey Keys will be listed after this key name
+   * @param fastList Only list immediate children ozoneKeys if fastList is true
+   * @return {@code Iterator<OzoneKey>}
+   */
+  public Iterator<? extends OzoneKey> listKeys(String keyPrefix, String prevKey,
+      boolean fastList) throws IOException {
     return new KeyIteratorFactory()
-        .getKeyIterator(keyPrefix, prevKey, bucketLayout);
+        .getKeyIterator(keyPrefix, prevKey, bucketLayout, fastList);
   }
 
   /**
@@ -1138,6 +1151,7 @@ public class OzoneBucket extends WithMetadata {
     private Stack<Pair<String, String>> stack;
     private boolean addedKeyPrefix;
     private String removeStartKey = "";
+    private boolean fastList;
 
     /**
      * Creates an Iterator to iterate over all keys after prevKey in the bucket.
@@ -1146,9 +1160,12 @@ public class OzoneBucket extends WithMetadata {
      *
      * @param keyPrefix
      * @param prevKey
+     * @param fastList
      */
-    KeyIteratorWithFSO(String keyPrefix, String prevKey) throws IOException {
+    KeyIteratorWithFSO(String keyPrefix, String prevKey, boolean fastList)
+        throws IOException {
       super(keyPrefix, prevKey);
+      this.fastList = fastList;
     }
 
     /**
@@ -1251,7 +1268,7 @@ public class OzoneBucket extends WithMetadata {
       // 1. Pop out top pair and get its immediate children
       List<OzoneKey> keysResultList = new ArrayList<>();
       if (stack.isEmpty()) {
-        // case: startKey is empty
+        // case: startKey is empty or fastList case
         if (getChildrenKeys(getKeyPrefix(), prevKey, keysResultList)) {
           return keysResultList;
         }
@@ -1372,6 +1389,13 @@ public class OzoneBucket extends WithMetadata {
 
         keysResultList.add(ozoneKey);
 
+        // If fastList is true, all immediate children will be added to
+        // keysResultList. Because only immediate children of keyPrefix
+        // are needed, the stack is always empty.
+        if (fastList) {
+          continue;
+        }
+
         if (status.isDirectory()) {
           // Adding in-progress keyPath back to the stack to make sure
           // all the siblings will be fetched.
@@ -1479,9 +1503,9 @@ public class OzoneBucket extends WithMetadata {
 
   private class KeyIteratorFactory {
     KeyIterator getKeyIterator(String keyPrefix, String prevKey,
-        BucketLayout bType) throws IOException {
+        BucketLayout bType, boolean fastList) throws IOException {
       if (bType.isFileSystemOptimized()) {
-        return new KeyIteratorWithFSO(keyPrefix, prevKey);
+        return new KeyIteratorWithFSO(keyPrefix, prevKey, fastList);
       } else {
         return new KeyIterator(keyPrefix, prevKey);
       }
