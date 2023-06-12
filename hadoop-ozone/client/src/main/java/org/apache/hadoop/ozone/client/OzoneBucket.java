@@ -565,13 +565,13 @@ public class OzoneBucket extends WithMetadata {
    *
    * @param keyPrefix Bucket prefix to match
    * @param prevKey Keys will be listed after this key name
-   * @param simpleList If true, only list immediate children ozoneKeys
+   * @param shallow If true, only list immediate children ozoneKeys
    * @return {@code Iterator<OzoneKey>}
    */
   public Iterator<? extends OzoneKey> listKeys(String keyPrefix, String prevKey,
-      boolean simpleList) throws IOException {
+      boolean shallow) throws IOException {
     return new KeyIteratorFactory()
-        .getKeyIterator(keyPrefix, prevKey, bucketLayout, simpleList);
+        .getKeyIterator(keyPrefix, prevKey, bucketLayout, shallow);
   }
 
   /**
@@ -1062,6 +1062,7 @@ public class OzoneBucket extends WithMetadata {
     private String keyPrefix = null;
     private Iterator<OzoneKey> currentIterator;
     private OzoneKey currentValue;
+    private boolean shallow;
 
     String getKeyPrefix() {
       return keyPrefix;
@@ -1071,15 +1072,23 @@ public class OzoneBucket extends WithMetadata {
       keyPrefix = keyPrefixPath;
     }
 
+    boolean isShallow() {
+      return shallow;
+    }
+
     /**
      * Creates an Iterator to iterate over all keys after prevKey in the bucket.
      * If prevKey is null it iterates from the first key in the bucket.
      * The returned keys match key prefix.
      * @param keyPrefix
+     * @param prevKey
+     * @param shallow
      */
-    KeyIterator(String keyPrefix, String prevKey) throws IOException {
+    KeyIterator(String keyPrefix, String prevKey, boolean shallow)
+        throws IOException {
       setKeyPrefix(keyPrefix);
       this.currentValue = null;
+      this.shallow = shallow;
       this.currentIterator = getNextListOfKeys(prevKey).iterator();
     }
 
@@ -1151,7 +1160,6 @@ public class OzoneBucket extends WithMetadata {
     private Stack<Pair<String, String>> stack;
     private boolean addedKeyPrefix;
     private String removeStartKey = "";
-    private boolean simpleList;
 
     /**
      * Creates an Iterator to iterate over all keys after prevKey in the bucket.
@@ -1160,12 +1168,11 @@ public class OzoneBucket extends WithMetadata {
      *
      * @param keyPrefix
      * @param prevKey
-     * @param simpleList
+     * @param shallow
      */
-    KeyIteratorWithFSO(String keyPrefix, String prevKey, boolean simpleList)
+    KeyIteratorWithFSO(String keyPrefix, String prevKey, boolean shallow)
         throws IOException {
-      super(keyPrefix, prevKey);
-      this.simpleList = simpleList;
+      super(keyPrefix, prevKey, shallow);
     }
 
     /**
@@ -1268,7 +1275,7 @@ public class OzoneBucket extends WithMetadata {
       // 1. Pop out top pair and get its immediate children
       List<OzoneKey> keysResultList = new ArrayList<>();
       if (stack.isEmpty()) {
-        // case: startKey is empty or simpleList case
+        // case: startKey is empty or shallow list case
         if (getChildrenKeys(getKeyPrefix(), prevKey, keysResultList)) {
           return keysResultList;
         }
@@ -1389,10 +1396,10 @@ public class OzoneBucket extends WithMetadata {
 
         keysResultList.add(ozoneKey);
 
-        // If simpleList is true, all immediate children will be added to
+        // If shallow is true, all immediate children will be added to
         // keysResultList. Because only immediate children of keyPrefix
         // are needed, the stack is always empty.
-        if (simpleList) {
+        if (isShallow()) {
           continue;
         }
 
@@ -1503,11 +1510,11 @@ public class OzoneBucket extends WithMetadata {
 
   private class KeyIteratorFactory {
     KeyIterator getKeyIterator(String keyPrefix, String prevKey,
-        BucketLayout bType, boolean simpleList) throws IOException {
+        BucketLayout bType, boolean shallow) throws IOException {
       if (bType.isFileSystemOptimized()) {
-        return new KeyIteratorWithFSO(keyPrefix, prevKey, simpleList);
+        return new KeyIteratorWithFSO(keyPrefix, prevKey, shallow);
       } else {
-        return new KeyIterator(keyPrefix, prevKey);
+        return new KeyIterator(keyPrefix, prevKey, shallow);
       }
     }
   }

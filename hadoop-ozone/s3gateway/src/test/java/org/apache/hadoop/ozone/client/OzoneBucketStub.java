@@ -247,8 +247,8 @@ public class OzoneBucketStub extends OzoneBucket {
   }
 
   public Iterator<? extends OzoneKey> listKeys(String keyPrefix,
-      String prevKey, boolean simpleList) throws IOException {
-    if (!simpleList) {
+      String prevKey, boolean shallow) throws IOException {
+    if (!shallow) {
       return prevKey == null ? listKeys(keyPrefix)
           : listKeys(keyPrefix, prevKey);
     }
