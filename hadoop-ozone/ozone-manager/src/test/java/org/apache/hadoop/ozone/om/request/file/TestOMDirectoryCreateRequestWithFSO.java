@@ -34,7 +34,6 @@ import org.apache.hadoop.ozone.om.OMMetrics;
 import org.apache.hadoop.ozone.om.OmMetadataManagerImpl;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.ResolvedBucket;
-import org.apache.hadoop.ozone.om.helpers.OzoneAclUtil;
 import org.apache.hadoop.ozone.om.helpers.OzoneFSUtils;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
@@ -766,8 +765,7 @@ public class TestOMDirectoryCreateRequestWithFSO {
       throws IOException {
     // bucketID is the parent
     long parentID = bucketId;
-    List<OzoneAcl> expectedParentAcls =
-        OzoneAclUtil.filterDefaultScope(bucketAcls);
+    List<OzoneAcl> expectedParentAcls = bucketAcls;
 
     for (int indx = 0; indx < dirs.size(); indx++) {
       String dirName = dirs.get(indx);
@@ -777,8 +775,7 @@ public class TestOMDirectoryCreateRequestWithFSO {
           parentID, dirName);
       OmDirectoryInfo omDirInfo =
           omMetadataManager.getDirectoryTable().get(dbKey);
-      List<OzoneAcl> omDirAcls =
-          OzoneAclUtil.filterDefaultScope(omDirInfo.getAcls());
+      List<OzoneAcl> omDirAcls = omDirInfo.getAcls();
 
       Assert.assertEquals("Failed to inherit parent acls!,",
           expectedParentAcls, omDirAcls);

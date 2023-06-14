@@ -44,7 +44,6 @@ import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmDirectoryInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfoGroup;
-import org.apache.hadoop.ozone.om.helpers.OzoneAclUtil;
 import org.apache.hadoop.ozone.om.helpers.OzoneFSUtils;
 import org.apache.hadoop.ozone.om.helpers.OzoneFileStatus;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
@@ -93,7 +92,9 @@ public final class OMFileRequest {
     String dirNameFromDetails = omMetadataManager.getOzoneDirKey(volumeName,
         bucketName, keyName);
     List<String> missing = new ArrayList<>();
-    List<OzoneAcl> inheritAcls = new ArrayList<>();
+    // Get parent all acls containing ACCESS and DEFAULT acls
+    // The logic of specific inherited acl should be when creating dir/file
+    List<OzoneAcl> parentAcls = new ArrayList<>();
     OMDirectoryResult result = OMDirectoryResult.NONE;
 
     while (keyPath != null) {
@@ -123,12 +124,10 @@ public final class OMFileRequest {
           result = OMDirectoryResult.DIRECTORY_EXISTS;
         } else {
           result = OMDirectoryResult.DIRECTORY_EXISTS_IN_GIVENPATH;
-          inheritAcls = OzoneAclUtil.filterDefaultScope(
-              omMetadataManager.getKeyTable(getBucketLayout(
-                  omMetadataManager, volumeName, bucketName))
-                  .get(dbDirKeyName).getAcls());
-          LOG.trace("Acls inherited from parent {} are : {}",
-              dbDirKeyName, inheritAcls);
+          parentAcls = omMetadataManager.getKeyTable(
+              getBucketLayout(omMetadataManager, volumeName, bucketName))
+              .get(dbDirKeyName).getAcls();
+          LOG.trace("Acls from parent {} are : {}", dbDirKeyName, parentAcls);
         }
       } else {
         if (!dbDirKeyName.equals(dirNameFromDetails)) {
@@ -140,24 +139,23 @@ public final class OMFileRequest {
 
         LOG.trace("verifyFiles in Path : /{}/{}/{} : {}",
             volumeName, bucketName, keyName, result);
-        return new OMPathInfo(missing, result, inheritAcls);
+        return new OMPathInfo(missing, result, parentAcls);
       }
       keyPath = keyPath.getParent();
     }
 
-    if (inheritAcls.isEmpty()) {
+    if (parentAcls.isEmpty()) {
       String bucketKey = omMetadataManager.getBucketKey(volumeName,
           bucketName);
-      inheritAcls = OzoneAclUtil.filterDefaultScope(
-          omMetadataManager.getBucketTable().get(bucketKey).getAcls());
-      LOG.trace("Acls inherited from bucket {} are : {}",
-          bucketName, inheritAcls);
+      parentAcls = omMetadataManager.getBucketTable().get(bucketKey)
+          .getAcls();
+      LOG.trace("Acls from bucket {} are : {}", bucketName, parentAcls);
     }
 
     LOG.trace("verifyFiles in Path : /{}/{}/{} : {}",
         volumeName, bucketName, keyName, result);
     // Found no files/ directories in the given path.
-    return new OMPathInfo(missing, OMDirectoryResult.NONE, inheritAcls);
+    return new OMPathInfo(missing, OMDirectoryResult.NONE, parentAcls);
   }
 
   /**
@@ -228,7 +226,7 @@ public final class OMFileRequest {
         if (elements.hasNext()) {
           result = OMDirectoryResult.DIRECTORY_EXISTS_IN_GIVENPATH;
           lastKnownParentId = omDirInfo.getObjectID();
-          inheritAcls = OzoneAclUtil.filterDefaultScope(omDirInfo.getAcls());
+          inheritAcls = omDirInfo.getAcls();
           continue;
         } else {
           // Checked all the sub-dirs till the leaf node.
