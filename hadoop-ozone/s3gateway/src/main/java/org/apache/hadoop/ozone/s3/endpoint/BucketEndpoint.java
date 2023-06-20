@@ -134,21 +134,18 @@ public class BucketEndpoint extends EndpointBase {
         startAfter = marker;
       }
 
+      // If continuation token and start after both are provided, then we
+      // ignore start After
+      String prevKey = continueToken != null ? decodedToken.getLastKey()
+          : startAfter;
+
+      // If shallow is true, only list immediate children
+      // delimited by OZONE_URI_DELIMITER
+      boolean shallow = OZONE_URI_DELIMITER.equals(delimiter);
+
       OzoneBucket bucket = getBucket(bucketName);
-      if (startAfter != null && continueToken != null) {
-        // If continuation token and start after both are provided, then we
-        // ignore start After
-        ozoneKeyIterator = bucket.listKeys(prefix, decodedToken.getLastKey());
-      } else if (startAfter != null && continueToken == null) {
-        ozoneKeyIterator = bucket.listKeys(prefix, startAfter);
-      } else if (startAfter == null && continueToken != null) {
-        ozoneKeyIterator = bucket.listKeys(prefix, decodedToken.getLastKey());
-      } else if (OZONE_URI_DELIMITER.equals(delimiter)) {
-        // List immediate children delimited by OZONE_URI_DELIMITER
-        ozoneKeyIterator = bucket.listKeys(prefix, null, true);
-      } else {
-        ozoneKeyIterator = bucket.listKeys(prefix);
-      }
+      ozoneKeyIterator = bucket.listKeys(prefix, prevKey, shallow);
+
     } catch (OMException ex) {
       AUDIT.logReadFailure(
           buildAuditMessageForFailure(s3GAction, getAuditParameters(), ex));

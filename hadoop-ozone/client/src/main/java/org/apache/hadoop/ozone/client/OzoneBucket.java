@@ -1062,7 +1062,7 @@ public class OzoneBucket extends WithMetadata {
     private String keyPrefix = null;
     private Iterator<OzoneKey> currentIterator;
     private OzoneKey currentValue;
-    private boolean shallow;
+    private final boolean shallow;
 
     String getKeyPrefix() {
       return keyPrefix;
