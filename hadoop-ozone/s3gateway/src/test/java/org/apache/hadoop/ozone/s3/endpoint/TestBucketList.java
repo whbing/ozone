@@ -37,7 +37,7 @@ import org.junit.Test;
 /**
  * Testing basic object list browsing.
  * Note: delimiter with '/' will call shallow list logic,
- * just list immediate subdir of prefix.
+ * just list immediate children which start with prefix.
  */
 public class TestBucketList {
 

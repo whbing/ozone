@@ -1275,7 +1275,7 @@ public class OzoneBucket extends WithMetadata {
       // 1. Pop out top pair and get its immediate children
       List<OzoneKey> keysResultList = new ArrayList<>();
       if (stack.isEmpty()) {
-        // case: startKey is empty or shallow list case
+        // Case: startKey is empty or shallow list case
         if (getChildrenKeys(getKeyPrefix(), prevKey, keysResultList)) {
           return keysResultList;
         }
