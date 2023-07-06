@@ -561,7 +561,7 @@ public class OzoneBucket extends WithMetadata {
 
   /**
    * Returns Iterator to iterate over all keys after prevKey in the bucket.
-   * If simpleList is true, iterator will only contain immediate children.
+   * If shallow is true, iterator will only contain immediate children.
    *
    * @param keyPrefix Bucket prefix to match
    * @param prevKey Keys will be listed after this key name
