@@ -41,6 +41,7 @@ import org.junit.rules.Timeout;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -160,15 +161,26 @@ public class TestListKeysWithFSO {
 
   @Test
   public void testListKeysWithValidStartKey() throws Exception {
-    // case-1: StartKey LeafNode is lexographically behind than prefixKey.
+    // case-1: ------------------------------------------------
+    // StartKey LeafNode is lexographically behind than prefixKey.
     // So, will return EmptyList
     // a1/b2 < a1/b2Invalid
+    String keyPrefix = "a1/b2";
+    String startKey = "a1";
     List<String> expectedKeys =
-        getExpectedKeyList("a1/b2", "a1", legacyOzoneBucket);
-    checkKeyList("a1/b2", "a1", expectedKeys, fsoOzoneBucket);
+        getExpectedKeyList(keyPrefix, startKey, legacyOzoneBucket);
+    checkKeyList(keyPrefix, startKey, expectedKeys, fsoOzoneBucket);
+    // test shallow
+    List<String> expectedShallowKeys = new LinkedList<>(
+        Collections.emptyList());
+    checkKeyList(keyPrefix, startKey, expectedShallowKeys, fsoOzoneBucket,
+        true);
 
-    // case-2: Same prefixKey and startKey, but with an ending slash
-    expectedKeys = getExpectedKeyList("a1/b2", "a1/b2/", legacyOzoneBucket);
+    // case-2: ------------------------------------------------
+    // Same prefixKey and startKey, but with an ending slash
+    keyPrefix = "a1/b2";
+    startKey = "a1/b2/";
+    expectedKeys = getExpectedKeyList(keyPrefix, startKey, legacyOzoneBucket);
     /**
      * a1/b2/d1/
      * a1/b2/d1/d11.tx
@@ -178,12 +190,23 @@ public class TestListKeysWithFSO {
      * a1/b2/d3/
      * a1/b2/d3/d31.tx
      */
-    checkKeyList("a1/b2", "a1/b2/", expectedKeys, fsoOzoneBucket);
+    checkKeyList(keyPrefix, startKey, expectedKeys, fsoOzoneBucket);
+    // test shallow
+    expectedShallowKeys = new LinkedList<>(Arrays.asList(
+        "a1/b2/d1/",
+        "a1/b2/d2/",
+        "a1/b2/d3/"
+    ));
+    checkKeyList(keyPrefix, startKey, expectedShallowKeys, fsoOzoneBucket,
+        true);
 
-    // case-3: Same prefixKey and startKey, but without an ending slash.
-    //  StartKey(dir) to be included in the finalList, if its a
-    //  directory and not ended with trailing slash.
-    expectedKeys = getExpectedKeyList("a1/b2", "a1/b2", legacyOzoneBucket);
+    // case-3: ------------------------------------------------
+    // Same prefixKey and startKey, but without an ending slash.
+    // StartKey(dir) to be included in the finalList, if it's a
+    // directory and not ended with trailing slash.
+    keyPrefix = "a1/b2";
+    startKey = "a1/b2";
+    expectedKeys = getExpectedKeyList(keyPrefix, startKey, legacyOzoneBucket);
     /**
      * a1/b2/
      * a1/b2/d1/
@@ -194,42 +217,79 @@ public class TestListKeysWithFSO {
      * a1/b2/d3/
      * a1/b2/d3/d31.tx
      */
-    checkKeyList("a1/b2", "a1/b2", expectedKeys, fsoOzoneBucket);
+    checkKeyList(keyPrefix, startKey, expectedKeys, fsoOzoneBucket);
+    // test shallow
+    expectedShallowKeys = new LinkedList<>(Arrays.asList(
+        "a1/b2/",
+        "a1/b2/d1/",
+        "a1/b2/d2/",
+        "a1/b2/d3/"
+    ));
+    checkKeyList(keyPrefix, startKey, expectedShallowKeys, fsoOzoneBucket,
+        true);
 
-    // case-4: StartKey is a file with an ending slash.
-    //  StartKey(file) with or without an ending slash
-    //  to be excluded in the finalList.
-    expectedKeys =
-        getExpectedKeyList("a1/b2/d2", "a1/b2/d2/d22.tx/", legacyOzoneBucket);
-    checkKeyList("a1/b2/d2", "a1/b2/d2/d22.tx/", expectedKeys, fsoOzoneBucket);
+    // case-4: ------------------------------------------------
+    // StartKey is a file with an ending slash.
+    // StartKey(file) with or without an ending slash
+    // to be excluded in the finalList.
+    keyPrefix = "a1/b2/d2";
+    startKey = "a1/b2/d2/d22.tx/";
+    expectedKeys = getExpectedKeyList(keyPrefix, startKey, legacyOzoneBucket);
+    checkKeyList(keyPrefix, startKey, expectedKeys, fsoOzoneBucket);
+    // test shallow
+    expectedShallowKeys = new LinkedList<>(Collections.emptyList());
+    checkKeyList(keyPrefix, startKey, expectedShallowKeys, fsoOzoneBucket,
+        true);
 
-    // case-5:
+    // case-5: ------------------------------------------------
     // StartKey "a1/b2/d2/d22.tx" is a file and get all the keys lexographically
     // greater than "a1/b2/d2/d22.tx".
-    expectedKeys =
-        getExpectedKeyList("a1/b2", "a1/b2/d2/d22.tx", legacyOzoneBucket);
+    keyPrefix = "a1/b2";
+    startKey = "a1/b2/d2/d22.tx";
+    expectedKeys = getExpectedKeyList(keyPrefix, startKey, legacyOzoneBucket);
     /**
      1 = "a1/b2/d3/"
      2 = "a1/b2/d3/d31.tx"
      */
-    checkKeyList("a1/b2", "a1/b2/d2/d22.tx", expectedKeys, fsoOzoneBucket);
+    checkKeyList(keyPrefix, startKey, expectedKeys, fsoOzoneBucket);
+    // test shallow
+    expectedShallowKeys = new LinkedList<>(Arrays.asList(
+        "a1/b2/d3/"
+    ));
+    checkKeyList(keyPrefix, startKey, expectedShallowKeys, fsoOzoneBucket,
+        true);
 
-    // case-6:
+    // case-6: ------------------------------------------------
     // StartKey "a1/b2/d2" is a dir and get all the keys lexographically
     // greater than "a1/b2/d2".
-    expectedKeys = getExpectedKeyList("a1/b2", "a1/b2/d2/", legacyOzoneBucket);
+    keyPrefix = "a1/b2";
+    startKey = "a1/b2/d2/";
+    expectedKeys = getExpectedKeyList(keyPrefix, startKey, legacyOzoneBucket);
     /**
      1 = "a1/b2/d2/d21.tx"
      2 = "a1/b2/d2/d22.tx"
      3 = "a1/b2/d3/"
      4 = "a1/b2/d3/d31.tx"
      */
-    checkKeyList("a1/b2", "a1/b2/d2/", expectedKeys, fsoOzoneBucket);
+    checkKeyList(keyPrefix, startKey, expectedKeys, fsoOzoneBucket);
+    // test shallow
+    // This is a special case which listStatus will list startKey's
+    // children when startKey is a subdirectory of keyPrefix.
+    expectedShallowKeys = new LinkedList<>(Arrays.asList(
+        "a1/b2/d2/d21.tx",
+        "a1/b2/d2/d22.tx",
+        "a1/b2/d3/"
+    ));
+    checkKeyList(keyPrefix, startKey, expectedShallowKeys, fsoOzoneBucket,
+        true);
 
-    // case-7: In below case, the startKey is a directory which is included
+
+    // case-7: ------------------------------------------------
+    // In below case, the startKey is a directory which is included
     // in the finalList. So, should we include startKey file in the finalList ?
-    expectedKeys =
-        getExpectedKeyList("a1", "a1/b2/d2/d21.tx", legacyOzoneBucket);
+    keyPrefix = "a1";
+    startKey = "a1/b2/d2/d21.tx";
+    expectedKeys = getExpectedKeyList(keyPrefix, startKey, legacyOzoneBucket);
     /**
      1 = "a1/b2/d2/d22.tx"
      2 = "a1/b2/d3/"
@@ -242,11 +302,15 @@ public class TestListKeysWithFSO {
      9 = "a1/b3/e3/"
      10 = "a1/b3/e3/e31.tx"
      */
-    checkKeyList("a1", "a1/b2/d2/d21.tx", expectedKeys, fsoOzoneBucket);
+    checkKeyList(keyPrefix, startKey, expectedKeys, fsoOzoneBucket);
+    // todo shallow
 
-    // case-8: StartKey(dir) to be included in the finalList, if its a
-    //  directory and not ended with trailing slash.
-    expectedKeys = getExpectedKeyList("a1", "a1/b2/d2/", legacyOzoneBucket);
+    // case-8: ------------------------------------------------
+    // StartKey(dir) to be included in the finalList, if it's a
+    // directory and not ended with trailing slash.
+    keyPrefix = "a1";
+    startKey = "a1/b2/d2/";
+    expectedKeys = getExpectedKeyList(keyPrefix, startKey, legacyOzoneBucket);
     /**
      1 = "a1/b2/d2/d21.tx"
      2 = "a1/b2/d2/d22.tx"
@@ -257,12 +321,19 @@ public class TestListKeysWithFSO {
      10 = "a1/b3/e3/"
      11 = "a1/b3/e3/e31.tx"
      */
-    checkKeyList("a1", "a1/b2/d2/", expectedKeys, fsoOzoneBucket);
+    checkKeyList(keyPrefix, startKey, expectedKeys, fsoOzoneBucket);
+    // todo shallow
 
-    // case-9: Reached Last Element, return EmptyList
-    expectedKeys =
-        getExpectedKeyList("a1", "a1/b3/e3/e31.tx", legacyOzoneBucket);
-    checkKeyList("a1", "a1/b3/e3/e31.tx", expectedKeys, fsoOzoneBucket);
+    // case-9: ------------------------------------------------
+    // Reached Last Element, return EmptyList
+    keyPrefix = "a1";
+    startKey = "a1/b3/e3/e31.tx";
+    expectedKeys = getExpectedKeyList(keyPrefix, startKey, legacyOzoneBucket);
+    checkKeyList(keyPrefix, startKey, expectedKeys, fsoOzoneBucket);
+    // test shallow
+    expectedShallowKeys = new LinkedList<>(Collections.emptyList());
+    checkKeyList(keyPrefix, startKey, expectedShallowKeys, fsoOzoneBucket,
+        true);
   }
 
   @Test
@@ -492,9 +563,15 @@ public class TestListKeysWithFSO {
 
   private void checkKeyList(String keyPrefix, String startKey,
       List<String> keys, OzoneBucket fsoBucket) throws Exception {
+    checkKeyList(keyPrefix, startKey, keys, fsoBucket, false);
+  }
+
+  private void checkKeyList(String keyPrefix, String startKey,
+      List<String> keys, OzoneBucket fsoBucket, boolean shallow)
+      throws Exception {
 
     Iterator<? extends OzoneKey> ozoneKeyIterator =
-        fsoBucket.listKeys(keyPrefix, startKey);
+        fsoBucket.listKeys(keyPrefix, startKey, shallow);
     ReplicationConfig expectedReplication =
         Optional.ofNullable(fsoBucket.getReplicationConfig())
             .orElse(cluster.getOzoneManager().getDefaultReplicationConfig());
