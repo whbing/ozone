@@ -181,7 +181,7 @@ public class S3InitiateMultipartUploadRequest extends OMKeyRequest {
           .get(omMetadataManager.getBucketKey(volumeName, bucketName));
 
       OMFileRequest.OMPathInfo pathInfo = null;
-      if (bucketInfo.getBucketLayout()
+      if (bucketInfo != null && bucketInfo.getBucketLayout()
           .shouldNormalizePaths(ozoneManager.getEnableFileSystemPaths())) {
         pathInfo = OMFileRequest.verifyFilesInPath(omMetadataManager,
             volumeName, bucketName, keyName, Paths.get(keyName));
