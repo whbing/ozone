@@ -184,7 +184,8 @@ public class S3InitiateMultipartUploadRequestWithFSO
           .setReplicationConfig(replicationConfig)
           .setOmKeyLocationInfos(Collections.singletonList(
               new OmKeyLocationInfoGroup(0, new ArrayList<>())))
-          .setAcls(OzoneAclUtil.fromProtobuf(keyArgs.getAclsList()))
+          .setAcls(getAclsForKey(keyArgs, bucketInfo, pathInfoFSO,
+              ozoneManager.getPrefixManager()))
           .setObjectID(pathInfoFSO.getLeafNodeObjectId())
           .setUpdateID(transactionLogIndex)
           .setFileEncryptionInfo(keyArgs.hasFileEncryptionInfo() ?
