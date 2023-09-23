@@ -138,4 +138,13 @@ public class SCMNodeStat implements NodeStat {
   public int hashCode() {
     return Long.hashCode(capacity.get() ^ scmUsed.get() ^ remaining.get());
   }
+
+  @Override
+  public String toString() {
+    return "SCMNodeStat{" +
+        "capacity=" + capacity.get() +
+        ", scmUsed=" + scmUsed.get() +
+        ", remaining=" + remaining.get() +
+        '}';
+  }
 }
