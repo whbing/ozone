@@ -494,16 +494,28 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
    */
   @Override
   public long takeSnapshot() throws IOException {
-    LOG.info("Current Snapshot Index {}", getLastAppliedTermIndex());
+    Table<String, TransactionInfo> txnInfoTable =
+        ozoneManager.getMetadataManager().getTransactionInfoTable();
+    long dbTerm = txnInfoTable.get(TRANSACTION_INFO_KEY).getTerm();
+    long dbIndex = txnInfoTable.get(TRANSACTION_INFO_KEY).getTransactionIndex();
+    LOG.info("Current Snapshot Index {}, db transactionInfo term: {}, index: {}",
+        getLastAppliedTermIndex(), dbTerm, dbIndex);
+
     TermIndex lastTermIndex = getLastAppliedTermIndex();
     long lastAppliedIndex = lastTermIndex.getIndex();
+
+    if (lastAppliedIndex < dbIndex) {
+      // This case should not occur, we should ignore and alert it
+      LOG.error("FATAL finding smaller transaction index : {} to update" +
+              " rocksdb index : {}", lastAppliedIndex, dbIndex);
+      return dbIndex;
+    }
+
     snapshotInfo.updateTermIndex(lastTermIndex.getTerm(),
         lastAppliedIndex);
     TransactionInfo build = new TransactionInfo.Builder()
         .setTransactionIndex(lastAppliedIndex)
         .setCurrentTerm(lastTermIndex.getTerm()).build();
-    Table<String, TransactionInfo> txnInfoTable =
-        ozoneManager.getMetadataManager().getTransactionInfoTable();
     txnInfoTable.put(TRANSACTION_INFO_KEY, build);
     ozoneManager.getMetadataManager().getStore().flushDB();
     return lastAppliedIndex;
