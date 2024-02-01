@@ -72,6 +72,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -486,7 +488,7 @@ public class TestKeyValueContainer {
       throws IOException {
     KeyValueContainerData cData = container.getContainerData();
     try (DBHandle metadataStore = BlockUtils.getDB(cData, CONF)) {
-      // Just update metdata, and don't insert in block table
+      // Just update metadata, and don't insert in block table
       // As for test, we are doing manually so adding key count to DB.
       metadataStore.getStore().getMetadataTable()
           .put(cData.getBlockCountKey(), numberOfKeysToWrite);
@@ -715,7 +717,7 @@ public class TestKeyValueContainer {
       assertEquals(columnFamilyOptions1, columnFamilyOptions2);
 
       // ColumnFamilyOptions should be same when queried multiple times
-      // for a particulat configuration
+      // for a particular configuration
       columnFamilyOptions1 = dbProfileSupplier.get()
           .getColumnFamilyOptions(conf);
       columnFamilyOptions2 = dbProfileSupplier.get()
@@ -769,7 +771,7 @@ public class TestKeyValueContainer {
       outProfile2 = ((AbstractDatanodeStore) store2).getDbProfile();
     }
 
-    // DBOtions should be different, except SCHEMA-V3
+    // DBOptions should be different, except SCHEMA-V3
     if (isSameSchemaVersion(schemaVersion, OzoneConsts.SCHEMA_V3)) {
       assertEquals(
           outProfile1.getDBOptions().compactionReadaheadSize(),
@@ -1101,4 +1103,128 @@ public class TestKeyValueContainer {
     assertEquals(pendingDeleteBlockCount,
         importedContainer.getContainerData().getNumPendingDeletionBlocks());
   }
+
+  @Test
+  public void testKvContainerLockHoldCount() throws InterruptedException {
+    // create container
+    OzoneConfiguration conf = new OzoneConfiguration();
+    long containerId = 1;
+    KeyValueContainerData data = new KeyValueContainerData(containerId,
+        ContainerLayoutVersion.FILE_PER_BLOCK,
+        ContainerTestHelper.CONTAINER_MAX_SIZE, UUID.randomUUID().toString(),
+        UUID.randomUUID().toString());
+    KeyValueContainer container = new KeyValueContainer(data, conf);
+
+    // read lock
+    assertEquals(0, container.getReadHoldCount());
+    container.readLock();
+    assertEquals(1, container.getReadHoldCount());
+
+    // independent thread count
+    CompletableFuture.runAsync(() ->
+        assertEquals(0, container.getReadHoldCount())).join();
+
+    container.readLock();
+    assertEquals(2, container.getReadHoldCount());
+
+    container.readUnlock();
+    assertEquals(1, container.getReadHoldCount());
+
+    container.readUnlock();
+    assertEquals(0, container.getReadHoldCount());
+
+    // write lock
+    assertFalse(container.isWriteLockedByCurrentThread());
+    assertEquals(0, container.getWriteHoldCount());
+
+    container.writeLock();
+    // independent thread count
+    CompletableFuture.runAsync(() -> {
+      assertFalse(container.isWriteLockedByCurrentThread());
+      assertEquals(0, container.getWriteHoldCount());
+    }).join();
+
+    assertTrue(container.isWriteLockedByCurrentThread());
+    assertEquals(1, container.getWriteHoldCount());
+
+    // writeLockTryLock hold write lock
+    container.writeLockTryLock(1, TimeUnit.SECONDS);
+    assertEquals(2, container.getWriteHoldCount());
+
+    container.writeUnlock();
+    assertTrue(container.isWriteLockedByCurrentThread());
+    assertEquals(1, container.getWriteHoldCount());
+
+    container.writeUnlock();
+    assertFalse(container.isWriteLockedByCurrentThread());
+    assertEquals(0, container.getWriteHoldCount());
+  }
+
+  @Test
+  public void testReadWriteLockConcurrentStats() throws InterruptedException {
+    // create container
+    OzoneConfiguration conf = new OzoneConfiguration();
+    long containerId = 1;
+    KeyValueContainerData data = new KeyValueContainerData(containerId,
+        ContainerLayoutVersion.FILE_PER_BLOCK,
+        ContainerTestHelper.CONTAINER_MAX_SIZE, UUID.randomUUID().toString(),
+        UUID.randomUUID().toString());
+    KeyValueContainer container = new KeyValueContainer(data, conf);
+
+    int readThreadCount = 10;
+    int writeThreadCount = 5;
+    Thread[] readThreads = new Thread[readThreadCount];
+    Thread[] writeThreads = new Thread[writeThreadCount];
+
+    for (int i = 0; i < readThreads.length; i++) {
+      readThreads[i] = new Thread(() -> {
+        container.readLock();
+        try {
+          Thread.sleep(100);
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+        container.readUnlock();
+      });
+      readThreads[i].setName("ReadLockThread-" + i);
+      readThreads[i].start();
+    }
+
+    for (int i = 0; i < writeThreads.length; i++) {
+      writeThreads[i] = new Thread(() -> {
+        // read lock
+        container.writeLock();
+        try {
+          Thread.sleep(100);
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+        container.writeUnlock();
+      });
+      writeThreads[i].setName("WriteLockThread-" + i);
+      writeThreads[i].start();
+    }
+
+    for (Thread r : readThreads) {
+      r.join();
+    }
+    for (Thread w : writeThreads) {
+      w.join();
+    }
+
+    final String readSamples = "Samples = " + readThreadCount;
+    String readHeldStat = container.getLockMetrics().getReadLockHeldTimeMsStat();
+    assertThat(readHeldStat).contains(readSamples);
+
+    String readWaitingStat = container.getLockMetrics().getReadLockWaitingTimeMsStat();
+    assertThat(readWaitingStat).contains(readSamples);
+
+    final String writeSamples = "Samples = " + writeThreadCount;
+    String writeHeldStat = container.getLockMetrics().getWriteLockHeldTimeMsStat();
+    assertThat(writeHeldStat).contains(writeSamples);
+
+    String writeWaitingStat = container.getLockMetrics().getWriteLockWaitingTimeMsStat();
+    assertThat(writeWaitingStat).contains(writeSamples);
+  }
+
 }

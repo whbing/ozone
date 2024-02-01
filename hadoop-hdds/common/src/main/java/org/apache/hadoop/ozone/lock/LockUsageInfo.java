@@ -15,10 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.ozone.om.lock;
+package org.apache.hadoop.ozone.lock;
 
 /**
- * Maintains lock related information useful in updating OMLockMetrics.
+ * Maintains lock related information useful in updating LockMetrics.
  */
 public class LockUsageInfo {
 

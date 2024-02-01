@@ -5,15 +5,15 @@
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
- *  with the License.  You may obtain a copy of the License at
+ * with the License.  You may obtain a copy of the License at
  *
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.hadoop.ozone.container.keyvalue;
@@ -64,6 +64,7 @@ import org.apache.hadoop.ozone.container.keyvalue.helpers.KeyValueContainerLocat
 import org.apache.hadoop.ozone.container.keyvalue.helpers.KeyValueContainerUtil;
 import org.apache.hadoop.ozone.container.replication.ContainerImporter;
 import org.apache.hadoop.ozone.container.upgrade.VersionedDatanodeFeatures;
+import org.apache.hadoop.ozone.lock.LockUsageInfo;
 import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
 
 import com.google.common.base.Preconditions;
@@ -79,6 +80,7 @@ import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Res
 import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Result.UNSUPPORTED_REQUEST;
 import static org.apache.hadoop.ozone.container.common.utils.StorageVolumeUtil.onFailure;
 
+import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,6 +99,11 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
   private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
   // Simple lock to synchronize container metadata dump operation.
   private final Object dumpLock = new Object();
+  private final KeyValueContainerLockMetrics lockMetrics;
+  private final ThreadLocal<LockUsageInfo> readLockTimeStampNanos =
+      ThreadLocal.withInitial(LockUsageInfo::new);
+  private final ThreadLocal<LockUsageInfo> writeLockTimeStampNanos =
+      ThreadLocal.withInitial(LockUsageInfo::new);
 
   private final KeyValueContainerData containerData;
   private ConfigurationSource config;
@@ -132,6 +139,7 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
     DatanodeConfiguration dnConf =
         config.getObject(DatanodeConfiguration.class);
     bCheckChunksFilePath = dnConf.getCheckEmptyContainerDir();
+    lockMetrics = KeyValueContainerLockMetrics.create();
   }
 
   @VisibleForTesting
@@ -724,8 +732,9 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
    */
   @Override
   public void readLock() {
+    long startWaitingTimeNanos = Time.monotonicNowNanos();
     this.lock.readLock().lock();
-
+    updateReadLockMetrics(startWaitingTimeNanos);
   }
 
   /**
@@ -734,6 +743,7 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
   @Override
   public void readUnlock() {
     this.lock.readLock().unlock();
+    updateReadUnlockMetrics();
   }
 
   /**
@@ -751,7 +761,9 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
   public void writeLock() {
     // TODO: The lock for KeyValueContainer object should not be exposed
     // publicly.
+    long startWaitingTimeNanos = Time.monotonicNowNanos();
     this.lock.writeLock().lock();
+    updateWriteLockMetrics(startWaitingTimeNanos);
   }
 
   /**
@@ -759,8 +771,9 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
    */
   @Override
   public void writeUnlock() {
+    boolean isWriteLocked = lock.isWriteLockedByCurrentThread();
     this.lock.writeLock().unlock();
-
+    updateWriteUnlockMetrics(isWriteLocked);
   }
 
   /**
@@ -787,12 +800,112 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
   @Override
   public void writeLockInterruptibly() throws InterruptedException {
     this.lock.writeLock().lockInterruptibly();
-
   }
 
   public boolean writeLockTryLock(long time, TimeUnit unit)
       throws InterruptedException {
-    return this.lock.writeLock().tryLock(time, unit);
+    long startWaitingTimeNanos = Time.monotonicNowNanos();
+    if (this.lock.writeLock().tryLock(time, unit)) {
+      updateWriteLockMetrics(startWaitingTimeNanos);
+      return true;
+    }
+    lockMetrics.setWriteLockWaitingTimeMsStat(unit.toMillis(time));
+    return false;
+  }
+
+  private void updateWriteLockMetrics(long startWaitingTimeNanos) {
+    /*
+     * writeHoldCount helps in metrics update only once in case of reentrant locks.
+     * Metrics are updated only if the write lock is held by the current thread.
+     */
+    if ((lock.getWriteHoldCount() == 1) && lock.isWriteLockedByCurrentThread()) {
+      long writeLockWaitingTimeNanos = Time.monotonicNowNanos() - startWaitingTimeNanos;
+
+      // Adds a snapshot to the metric writeLockWaitingTimeMsStat.
+      lockMetrics.setWriteLockWaitingTimeMsStat(
+          TimeUnit.NANOSECONDS.toMillis(writeLockWaitingTimeNanos));
+      setStartWriteHeldTimeNanos(Time.monotonicNowNanos());
+    }
+  }
+
+  private void updateWriteUnlockMetrics(boolean isWriteLocked) {
+    /*
+     * writeHoldCount helps in metrics update only once in case of reentrant locks.
+     * Metrics are updated only if the write lock is held by the current thread.
+     */
+    if ((lock.getWriteHoldCount() == 0) && isWriteLocked) {
+      long writeLockHeldTimeNanos = Time.monotonicNowNanos() - getStartWriteHeldTimeNanos();
+      // Adds a snapshot to the metric writeLockHeldTimeMsStat.
+      lockMetrics.setWriteLockHeldTimeMsStat(
+          TimeUnit.NANOSECONDS.toMillis(writeLockHeldTimeNanos));
+    }
+  }
+
+  private void updateReadLockMetrics(long startWaitingTimeNanos) {
+    /*
+     * readHoldCount helps in metrics update only once in case of reentrant locks.
+     * Metrics are updated only if the read lock is held by the current thread.
+     */
+    if (lock.getReadHoldCount() == 1) {
+      long readLockWaitingTimeNanos = Time.monotonicNowNanos() - startWaitingTimeNanos;
+      // Adds a snapshot to the metric readLockWaitingTimeMsStat.
+      lockMetrics.setReadLockWaitingTimeMsStat(
+          TimeUnit.NANOSECONDS.toMillis(readLockWaitingTimeNanos));
+      setStartReadHeldTimeNanos(Time.monotonicNowNanos());
+    }
+  }
+
+  private void updateReadUnlockMetrics() {
+    /*
+     * readHoldCount helps in metrics update only once in case of reentrant locks.
+     * Metrics are updated only if the read lock is held by the current thread.
+     */
+    if (lock.getReadHoldCount() == 0) {
+      long readLockHeldTimeNanos = Time.monotonicNowNanos() - getStartReadHeldTimeNanos();
+      // Adds a snapshot to the metric readLockHeldTimeMsStat.
+      lockMetrics.setReadLockHeldTimeMsStat(
+          TimeUnit.NANOSECONDS.toMillis(readLockHeldTimeNanos));
+    }
+  }
+
+  private void setStartReadHeldTimeNanos(long startReadHeldTimeNanos) {
+    readLockTimeStampNanos.get().setStartReadHeldTimeNanos(startReadHeldTimeNanos);
+  }
+
+  private void setStartWriteHeldTimeNanos(long startWriteHeldTimeNanos) {
+    writeLockTimeStampNanos.get().setStartWriteHeldTimeNanos(startWriteHeldTimeNanos);
+  }
+
+  private long getStartReadHeldTimeNanos() {
+    long startReadHeldTimeNanos = readLockTimeStampNanos.get().getStartReadHeldTimeNanos();
+    readLockTimeStampNanos.remove();
+    return startReadHeldTimeNanos;
+  }
+
+  private long getStartWriteHeldTimeNanos() {
+    long startWriteHeldTimeNanos = writeLockTimeStampNanos.get().getStartWriteHeldTimeNanos();
+    writeLockTimeStampNanos.remove();
+    return startWriteHeldTimeNanos;
+  }
+
+  @VisibleForTesting
+  public int getReadHoldCount() {
+    return lock.getReadHoldCount();
+  }
+
+  @VisibleForTesting
+  public int getWriteHoldCount() {
+    return lock.getWriteHoldCount();
+  }
+
+  @VisibleForTesting
+  public boolean isWriteLockedByCurrentThread() {
+    return lock.isWriteLockedByCurrentThread();
+  }
+
+  @VisibleForTesting
+  public KeyValueContainerLockMetrics getLockMetrics() {
+    return lockMetrics;
   }
 
   /**
