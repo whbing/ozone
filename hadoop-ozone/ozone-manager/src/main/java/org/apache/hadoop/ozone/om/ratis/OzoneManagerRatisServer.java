@@ -87,6 +87,7 @@ import org.apache.ratis.rpc.RpcType;
 import org.apache.ratis.rpc.SupportedRpcType;
 import org.apache.ratis.server.RaftServer;
 import org.apache.ratis.server.RaftServerConfigKeys;
+import org.apache.ratis.server.RaftServerConfigKeys.Read;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.apache.ratis.server.storage.RaftStorage;
 import org.apache.ratis.util.LifeCycle;
@@ -124,6 +125,7 @@ public final class OzoneManagerRatisServer {
 
   private final ClientId clientId = ClientId.randomId();
   private static final AtomicLong CALL_ID_COUNTER = new AtomicLong();
+  private final Read.Option readOption;
 
   private static long nextCallId() {
     return CALL_ID_COUNTER.getAndIncrement() & Long.MAX_VALUE;
@@ -170,6 +172,8 @@ public final class OzoneManagerRatisServer {
           raftGroupIdStr, raftPeersStr.substring(2));
     }
     this.omStateMachine = getStateMachine(conf);
+
+    this.readOption = RaftServerConfigKeys.Read.option(serverProperties);
 
     Parameters parameters = createServerTlsParameters(secConfig, certClient);
     this.server = RaftServer.newBuilder()
@@ -256,11 +260,11 @@ public final class OzoneManagerRatisServer {
    * @return OMResponse - response returned to the client.
    * @throws ServiceException
    */
-  public OMResponse submitRequest(OMRequest omRequest) throws ServiceException {
+  public OMResponse submitRequest(OMRequest omRequest, boolean isWrite) throws ServiceException {
     // In prepare mode, only prepare and cancel requests are allowed to go
     // through.
     if (ozoneManager.getPrepareState().requestAllowed(omRequest.getCmdType())) {
-      RaftClientRequest raftClientRequest = createRaftRequest(omRequest);
+      RaftClientRequest raftClientRequest = createRaftRequest(omRequest, isWrite);
       RaftClientReply raftClientReply = submitRequestToRatis(raftClientRequest);
       return createOmResponse(omRequest, raftClientReply);
     } else {
@@ -294,10 +298,10 @@ public final class OzoneManagerRatisServer {
         () -> submitRequestToRatisImpl(raftClientRequest));
   }
 
-  private RaftClientRequest createRaftRequest(OMRequest omRequest) {
+  private RaftClientRequest createRaftRequest(OMRequest omRequest, boolean isWrite) {
     return captureLatencyNs(
         perfMetrics.getCreateRatisRequestLatencyNs(),
-        () -> createRaftRequestImpl(omRequest));
+        () -> createRaftRequestImpl(omRequest, isWrite));
   }
 
   /**
@@ -459,7 +463,7 @@ public final class OzoneManagerRatisServer {
    * @return RaftClientRequest - Raft Client request which is submitted to
    * ratis server.
    */
-  private RaftClientRequest createRaftRequestImpl(OMRequest omRequest) {
+  private RaftClientRequest createRaftRequestImpl(OMRequest omRequest, boolean isWrite) {
     if (!ozoneManager.isTestSecureOmFlag()) {
       Preconditions.checkArgument(Server.getClientId() != DUMMY_CLIENT_ID);
       Preconditions.checkArgument(Server.getCallId() != INVALID_CALL_ID);
@@ -473,7 +477,8 @@ public final class OzoneManagerRatisServer {
         .setMessage(
             Message.valueOf(
                 OMRatisHelper.convertRequestToByteString(omRequest)))
-        .setType(RaftClientRequest.writeRequestType())
+        .setType(isWrite ? RaftClientRequest.writeRequestType() :
+            RaftClientRequest.readRequestType())
         .build();
   }
 
@@ -575,6 +580,10 @@ public final class OzoneManagerRatisServer {
   @VisibleForTesting
   public RaftServer.Division getServerDivision() {
     return serverDivision.get();
+  }
+
+  public boolean isLinearizableRead() {
+    return readOption == Read.Option.LINEARIZABLE;
   }
 
   /**
@@ -702,6 +711,14 @@ public final class OzoneManagerRatisServer {
   }
 
   private static void setRaftRpcProperties(RaftProperties properties, ConfigurationSource conf) {
+    // Set Read option
+    RaftServerConfigKeys.Read.setOption(properties, conf.getEnum(
+        OMConfigKeys.OZONE_OM_RATIS_SERVER_READ_OPTION,
+        OMConfigKeys.OZONE_OM_RATIS_SERVER_READ_OPTION_DEFAULT));
+    RaftServerConfigKeys.Read.setLeaderLeaseEnabled(properties, conf.getBoolean(
+        OMConfigKeys.OZONE_OM_RATIS_SERVER_READ_LEADER_LEASE_ENABLED,
+        OMConfigKeys.OZONE_OM_RATIS_SERVER_READ_LEADER_LEASE_ENABLED_DEFAULT));
+
     // Set the server request timeout
     TimeUnit serverRequestTimeoutUnit = OMConfigKeys.OZONE_OM_RATIS_SERVER_REQUEST_TIMEOUT_DEFAULT.getUnit();
     final TimeDuration serverRequestTimeout = TimeDuration.valueOf(conf.getTimeDuration(
