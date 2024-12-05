@@ -260,12 +260,11 @@ public final class OzoneManagerRatisServer {
    * @return OMResponse - response returned to the client.
    * @throws ServiceException
    */
-  public OMResponse submitRequest(OMRequest omRequest, boolean isWrite, boolean preferNonLinearizable)
-      throws ServiceException {
+  public OMResponse submitRequest(OMRequest omRequest, boolean isWrite) throws ServiceException {
     // In prepare mode, only prepare and cancel requests are allowed to go
     // through.
     if (ozoneManager.getPrepareState().requestAllowed(omRequest.getCmdType())) {
-      RaftClientRequest raftClientRequest = createRaftRequest(omRequest, isWrite, preferNonLinearizable);
+      RaftClientRequest raftClientRequest = createRaftRequest(omRequest, isWrite);
       RaftClientReply raftClientReply = submitRequestToRatis(raftClientRequest);
       return createOmResponse(omRequest, raftClientReply);
     } else {
@@ -299,10 +298,10 @@ public final class OzoneManagerRatisServer {
         () -> submitRequestToRatisImpl(raftClientRequest));
   }
 
-  private RaftClientRequest createRaftRequest(OMRequest omRequest, boolean isWrite, boolean preferNonLinearizable) {
+  private RaftClientRequest createRaftRequest(OMRequest omRequest, boolean isWrite) {
     return captureLatencyNs(
         perfMetrics.getCreateRatisRequestLatencyNs(),
-        () -> createRaftRequestImpl(omRequest, isWrite, preferNonLinearizable));
+        () -> createRaftRequestImpl(omRequest, isWrite));
   }
 
   /**
@@ -332,7 +331,7 @@ public final class OzoneManagerRatisServer {
       RaftClientRequest raftClientRequest) throws ServiceException {
     try {
       return server.submitClientRequestAsync(raftClientRequest)
-          .get(); //
+          .get();
     } catch (ExecutionException | IOException ex) {
       throw new ServiceException(ex.getMessage(), ex);
     } catch (InterruptedException ex) {
@@ -464,7 +463,7 @@ public final class OzoneManagerRatisServer {
    * @return RaftClientRequest - Raft Client request which is submitted to
    * ratis server.
    */
-  private RaftClientRequest createRaftRequestImpl(OMRequest omRequest, boolean isWrite, boolean preferNonLinearizable) {
+  private RaftClientRequest createRaftRequestImpl(OMRequest omRequest, boolean isWrite) {
     if (!ozoneManager.isTestSecureOmFlag()) {
       Preconditions.checkArgument(Server.getClientId() != DUMMY_CLIENT_ID);
       Preconditions.checkArgument(Server.getCallId() != INVALID_CALL_ID);
@@ -479,7 +478,7 @@ public final class OzoneManagerRatisServer {
             Message.valueOf(
                 OMRatisHelper.convertRequestToByteString(omRequest)))
         .setType(isWrite ? RaftClientRequest.writeRequestType() :
-            RaftClientRequest.readRequestType(preferNonLinearizable))
+            RaftClientRequest.readRequestType())
         .build();
   }
 
