@@ -273,6 +273,11 @@ public final class OMConfigKeys {
       = "ozone.om.ratis.server.read.option";
   public static final Read.Option OZONE_OM_RATIS_SERVER_READ_OPTION_DEFAULT
       = Read.Option.DEFAULT;
+
+  public static final String OZONE_OM_RATIS_SERVER_READ_PREFER_NONLINEARIZABLE
+      = "ozone.om.ratis.server.read.prefer-non-linearizable";
+  public static final boolean OZONE_OM_RATIS_SERVER_READ_PREFER_NONLINEARIZABLE_DEFAULT
+      = false;
   public static final String OZONE_OM_RATIS_SERVER_READ_LEADER_LEASE_ENABLED
       = "ozone.om.ratis.server.read.leader.lease.enabled";
   public static final boolean OZONE_OM_RATIS_SERVER_READ_LEADER_LEASE_ENABLED_DEFAULT
