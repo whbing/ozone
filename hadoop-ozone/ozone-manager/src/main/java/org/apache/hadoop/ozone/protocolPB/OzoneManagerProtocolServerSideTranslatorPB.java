@@ -16,6 +16,8 @@
  */
 package org.apache.hadoop.ozone.protocolPB;
 
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RATIS_SERVER_READ_PREFER_NONLINEARIZABLE;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RATIS_SERVER_READ_PREFER_NONLINEARIZABLE_DEFAULT;
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.LEADER_AND_READY;
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
 import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createClientRequest;
@@ -90,6 +92,8 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
 
   private OMRequest lastRequestToSubmit;
 
+  private boolean preferNonLinearizable;
+
 
   /**
    * Constructs an instance of the server handler.
@@ -126,6 +130,8 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
         .fromPackage(OM_REQUESTS_PACKAGE)
         .withinContext(ValidationContext.of(ozoneManager.getVersionManager(), ozoneManager.getMetadataManager()))
         .load();
+    this.preferNonLinearizable = ozoneManager.getConfiguration().getBoolean(
+        OZONE_OM_RATIS_SERVER_READ_PREFER_NONLINEARIZABLE, OZONE_OM_RATIS_SERVER_READ_PREFER_NONLINEARIZABLE_DEFAULT);
   }
 
   private boolean isRatisEnabled() {
@@ -251,7 +257,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
    */
   private OMResponse submitRequestToRatis(OMRequest request)
       throws ServiceException {
-    return omRatisServer.submitRequest(request, true);
+    return omRatisServer.submitRequest(request, true, false);
   }
 
   /**
@@ -259,7 +265,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
    */
   private OMResponse submitReadRequestToRatis(OMRequest request)
       throws ServiceException {
-    return omRatisServer.submitRequest(request, false);
+    return omRatisServer.submitRequest(request, false, preferNonLinearizable);
   }
 
   private OMResponse submitReadRequestToOM(OMRequest request)
